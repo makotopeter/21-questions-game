@@ -13,27 +13,53 @@ QUESTION_BANK = {
 }
 
 
-if "category" not in st.session_state:
-    st.session_state.category = "朋友"
 
-if "current_question" not in st.session_state:
-    st.session_state.current_question = None
+import html
+import streamlit.components.v1 as components
 
-if "remaining_questions" not in st.session_state:
-    st.session_state.remaining_questions = []
+CATEGORY_CONFIG = {
+    "朋友": {
+        "icon": "♥",
+        "label": "朋友題",
+        "accent": "#c91f32",
+    },
+    "感情": {
+        "icon": "◆",
+        "label": "感情題",
+        "accent": "#9f1d45",
+    },
+}
 
-if "question_number" not in st.session_state:
-    st.session_state.question_number = 0
+
+def initialize_state() -> None:
+    defaults = {
+        "category": "朋友",
+        "current_question": None,
+        "remaining_questions": [],
+        "question_number": 0,
+    }
+
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
 
 def reset_deck(category: str) -> None:
-    st.session_state.remaining_questions = QUESTION_BANK[category].copy()
-    random.shuffle(st.session_state.remaining_questions)
+    """重新洗牌，整輪抽完前不重複。"""
+    questions = QUESTION_BANK.get(category, []).copy()
+    random.shuffle(questions)
+    st.session_state.remaining_questions = questions
 
 
-def draw_question(category: str) -> None:
+def draw_question() -> None:
+    category = st.session_state.category
+
     if not st.session_state.remaining_questions:
         reset_deck(category)
+
+    if not st.session_state.remaining_questions:
+        st.session_state.current_question = "目前這個題型沒有題目。"
+        return
 
     st.session_state.current_question = (
         st.session_state.remaining_questions.pop()
@@ -42,162 +68,458 @@ def draw_question(category: str) -> None:
 
 
 def change_category() -> None:
-    st.session_state.category = st.session_state.category_selector
+    category = st.session_state.category_selector
+    st.session_state.category = category
     st.session_state.current_question = None
     st.session_state.question_number = 0
-    reset_deck(st.session_state.category)
+    reset_deck(category)
 
 
 def render_card() -> None:
-    import html
-
-    category = html.escape(st.session_state.category)
+    category = st.session_state.category
+    config = CATEGORY_CONFIG[category]
     question = st.session_state.current_question
 
-    if question is None:
-        card_class = "question-card"
-        front_text = "點擊下方按鈕翻牌"
-        back_content = "準備開始"
-    else:
-        card_class = "question-card is-flipped"
-        front_text = "21 Questions"
-        back_content = html.escape(question)
+    is_flipped = question is not None
+    safe_question = html.escape(question or "準備開始")
+    safe_label = html.escape(config["label"])
+    safe_icon = html.escape(config["icon"])
+    animation_class = "flipped" if is_flipped else ""
 
-    st.markdown(
-        f"""
-        <style>
-        .card-stage {{
-            width: 100%;
-            display: flex;
-            justify-content: center;
-            padding: 18px 0 28px;
-            perspective: 1200px;
+    card_html = f"""
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+    * {{
+        box-sizing: border-box;
+    }}
+
+    html, body {{
+        margin: 0;
+        background: transparent;
+        font-family:
+            -apple-system,
+            BlinkMacSystemFont,
+            "Segoe UI",
+            "Microsoft JhengHei",
+            sans-serif;
+    }}
+
+    .scene {{
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        padding: 12px 8px 28px;
+        perspective: 1500px;
+    }}
+
+    .card {{
+        position: relative;
+        width: min(92vw, 520px);
+        aspect-ratio: 0.72;
+        transform-style: preserve-3d;
+        transition: transform 900ms cubic-bezier(.2,.72,.22,1);
+        filter: drop-shadow(0 28px 35px rgba(0, 0, 0, .35));
+    }}
+
+    .card.flipped {{
+        animation: reveal 950ms cubic-bezier(.2,.72,.22,1) forwards;
+    }}
+
+    @keyframes reveal {{
+        0% {{
+            transform: rotateY(0deg) translateY(8px) scale(.97);
+        }}
+        46% {{
+            transform: rotateY(92deg) translateY(-4px) scale(1.025);
+        }}
+        100% {{
+            transform: rotateY(180deg) translateY(0) scale(1);
+        }}
+    }}
+
+    .face {{
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        border-radius: 30px;
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+        border: 10px solid #d9ad71;
+        box-shadow:
+            inset 0 0 0 2px rgba(73, 31, 28, .5),
+            inset 0 0 34px rgba(46, 17, 16, .25);
+    }}
+
+    .back {{
+        display: grid;
+        place-items: center;
+        color: #f4cf8e;
+        background:
+            radial-gradient(circle at 50% 50%,
+                rgba(108, 20, 25, .22) 0 16%,
+                transparent 16.5%),
+            repeating-radial-gradient(
+                circle at 52% 48%,
+                rgba(255,255,255,.025) 0 1px,
+                transparent 1px 4px
+            ),
+            linear-gradient(145deg, #9f2027, #71131b 58%, #8f2026);
+    }}
+
+    .back::before {{
+        content: "";
+        position: absolute;
+        inset: 18px;
+        border: 2px solid rgba(241, 198, 119, .85);
+        border-radius: 18px;
+        box-shadow:
+            inset 0 0 0 7px rgba(128, 31, 35, .78),
+            inset 0 0 0 9px rgba(240, 196, 116, .42);
+    }}
+
+    .corner {{
+        position: absolute;
+        width: 54px;
+        height: 54px;
+        color: #edc47c;
+        font-size: 42px;
+        line-height: 1;
+    }}
+
+    .corner.tl {{ top: 24px; left: 27px; }}
+    .corner.tr {{ top: 24px; right: 27px; transform: rotate(90deg); }}
+    .corner.bl {{ bottom: 24px; left: 27px; transform: rotate(-90deg); }}
+    .corner.br {{ bottom: 24px; right: 27px; transform: rotate(180deg); }}
+
+    .sigil {{
+        position: relative;
+        width: 64%;
+        aspect-ratio: 1;
+        display: grid;
+        place-items: center;
+        border: 2px solid rgba(239, 193, 113, .78);
+        border-radius: 50%;
+        box-shadow:
+            0 0 0 18px rgba(235, 185, 99, .08),
+            0 0 0 2px rgba(93, 19, 24, .9) inset;
+    }}
+
+    .sigil::before,
+    .sigil::after {{
+        content: "";
+        position: absolute;
+        inset: 14%;
+        border: 1px solid rgba(239, 193, 113, .68);
+        transform: rotate(45deg);
+    }}
+
+    .sigil::after {{
+        inset: 27%;
+        border-radius: 50%;
+        transform: none;
+    }}
+
+    .question-mark {{
+        position: relative;
+        z-index: 2;
+        font-family: Georgia, serif;
+        font-size: clamp(90px, 20vw, 142px);
+        font-weight: 700;
+        text-shadow: 0 6px 12px rgba(38, 6, 9, .55);
+    }}
+
+    .stars {{
+        position: absolute;
+        inset: 16%;
+        border-top: 2px solid rgba(239, 193, 113, .38);
+        border-bottom: 2px solid rgba(239, 193, 113, .38);
+        transform: rotate(45deg);
+    }}
+
+    .front {{
+        transform: rotateY(180deg);
+        color: #221d1a;
+        background:
+            radial-gradient(circle at 25% 12%,
+                rgba(255,255,255,.92), transparent 36%),
+            repeating-linear-gradient(
+                15deg,
+                rgba(120, 74, 41, .018) 0 1px,
+                transparent 1px 5px
+            ),
+            #f9f0df;
+    }}
+
+    .front::before {{
+        content: "";
+        position: absolute;
+        inset: 19px;
+        border: 2px solid {config["accent"]};
+        border-radius: 17px;
+        opacity: .75;
+    }}
+
+    .front::after {{
+        content: "✦";
+        position: absolute;
+        left: 50%;
+        bottom: 36px;
+        transform: translateX(-50%);
+        color: {config["accent"]};
+        font-size: 25px;
+    }}
+
+    .front-content {{
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 64px 48px 72px;
+        text-align: center;
+    }}
+
+    .category {{
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        color: {config["accent"]};
+        font-size: clamp(18px, 4vw, 24px);
+        font-weight: 800;
+        letter-spacing: .03em;
+    }}
+
+    .divider {{
+        width: 62%;
+        height: 1px;
+        margin-top: 22px;
+        background: linear-gradient(
+            90deg,
+            transparent,
+            {config["accent"]},
+            transparent
+        );
+        opacity: .62;
+    }}
+
+    .question {{
+        flex: 1;
+        width: 100%;
+        display: grid;
+        place-items: center;
+        font-size: clamp(24px, 5.1vw, 38px);
+        font-weight: 700;
+        line-height: 1.55;
+        letter-spacing: .02em;
+        overflow-wrap: anywhere;
+    }}
+
+    .number {{
+        color: rgba(68, 45, 35, .62);
+        font-size: 15px;
+        letter-spacing: .1em;
+    }}
+
+    @media (max-width: 520px) {{
+        .face {{
+            border-width: 7px;
+            border-radius: 23px;
         }}
 
-        .question-card {{
-            width: min(100%, 520px);
-            height: 330px;
-            position: relative;
-            transform-style: preserve-3d;
-            transition: transform 0.85s cubic-bezier(.2,.7,.2,1);
+        .front-content {{
+            padding: 48px 30px 58px;
         }}
 
-        .question-card.is-flipped {{
-            animation: flip-card 0.9s cubic-bezier(.2,.7,.2,1) forwards;
+        .question {{
+            font-size: clamp(21px, 6.3vw, 31px);
         }}
 
-        @keyframes flip-card {{
-            0% {{
-                transform: rotateY(0deg) scale(0.97);
-            }}
-            55% {{
-                transform: rotateY(105deg) scale(1.02);
-            }}
-            100% {{
-                transform: rotateY(180deg) scale(1);
-            }}
+        .corner {{
+            width: 42px;
+            height: 42px;
+            font-size: 32px;
         }}
+    }}
 
-        .card-face {{
-            position: absolute;
-            inset: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 34px;
-            border-radius: 28px;
-            backface-visibility: hidden;
-            -webkit-backface-visibility: hidden;
-            box-shadow: 0 18px 45px rgba(16, 24, 40, 0.18);
-            text-align: center;
+    @media (prefers-reduced-motion: reduce) {{
+        .card.flipped {{
+            animation-duration: 1ms;
         }}
+    }}
+</style>
+</head>
+<body>
+<div class="scene">
+    <div class="card {animation_class}">
+        <div class="face back">
+            <div class="corner tl">⌜</div>
+            <div class="corner tr">⌜</div>
+            <div class="corner bl">⌜</div>
+            <div class="corner br">⌜</div>
+            <div class="stars"></div>
+            <div class="sigil">
+                <div class="question-mark">?</div>
+            </div>
+        </div>
 
-        .card-front {{
-            color: white;
-            background:
-                radial-gradient(circle at top left,
-                    rgba(255,255,255,.22), transparent 34%),
-                linear-gradient(145deg, #343a40, #111827);
-            border: 1px solid rgba(255,255,255,.18);
-        }}
-
-        .card-front::before {{
-            content: "";
-            position: absolute;
-            inset: 16px;
-            border: 1px solid rgba(255,255,255,.35);
-            border-radius: 20px;
-            pointer-events: none;
-        }}
-
-        .card-back {{
-            transform: rotateY(180deg);
-            background:
-                radial-gradient(circle at top right,
-                    rgba(255,255,255,.75), transparent 32%),
-                linear-gradient(145deg, #fff7ed, #fef3c7);
-            color: #292524;
-            border: 1px solid rgba(120, 53, 15, 0.16);
-        }}
-
-        .card-kicker {{
-            margin-bottom: 18px;
-            font-size: 0.82rem;
-            font-weight: 800;
-            letter-spacing: 0.18em;
-            text-transform: uppercase;
-            opacity: 0.78;
-        }}
-
-        .card-title {{
-            max-width: 430px;
-            font-size: clamp(1.45rem, 4vw, 2.1rem);
-            font-weight: 800;
-            line-height: 1.45;
-        }}
-
-        .card-number {{
-            margin-top: 22px;
-            font-size: 0.85rem;
-            opacity: 0.62;
-        }}
-
-        @media (max-width: 640px) {{
-            .question-card {{
-                height: 390px;
-            }}
-
-            .card-face {{
-                padding: 28px 24px;
-                border-radius: 22px;
-            }}
-        }}
-        </style>
-
-        <div class="card-stage">
-            <div class="{card_class}">
-                <div class="card-face card-front">
-                    <div class="card-kicker">{category}</div>
-                    <div class="card-title">{front_text}</div>
+        <div class="face front">
+            <div class="front-content">
+                <div class="category">
+                    <span>{safe_icon}</span>
+                    <span>{safe_label}</span>
                 </div>
-
-                <div class="card-face card-back">
-                    <div class="card-kicker">{category}</div>
-                    <div class="card-title">{back_content}</div>
-                    <div class="card-number">
-                        第 {st.session_state.question_number} 題
-                    </div>
+                <div class="divider"></div>
+                <div class="question">{safe_question}</div>
+                <div class="number">
+                    第 {st.session_state.question_number} 題
                 </div>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+    </div>
+</div>
+</body>
+</html>
+"""
+
+    # 使用 components.html，避免 Streamlit 將 HTML 誤判成程式碼區塊。
+    components.html(
+        card_html,
+        height=760,
+        scrolling=False,
     )
 
 
+initialize_state()
+
+st.markdown(
+    """
+<style>
+    .stApp {
+        background:
+            radial-gradient(circle at 50% 15%, #18202d 0, #0d1118 48%, #080b10 100%);
+    }
+
+    [data-testid="stHeader"] {
+        background: transparent;
+    }
+
+    .block-container {
+        max-width: 760px;
+        padding-top: 1.6rem;
+        padding-bottom: 3rem;
+    }
+
+    h1 {
+        color: #f7f7f8;
+        text-align: center;
+        letter-spacing: .04em;
+    }
+
+    .app-subtitle {
+        margin: -5px 0 22px;
+        color: #aab1bc;
+        text-align: center;
+    }
+
+    div[role="radiogroup"] {
+        justify-content: center;
+        gap: 12px;
+        padding: 8px;
+        border: 1px solid rgba(255,255,255,.08);
+        border-radius: 17px;
+        background: rgba(36, 43, 54, .88);
+    }
+
+    div[role="radiogroup"] label {
+        min-width: 150px;
+        justify-content: center;
+        padding: 11px 20px;
+        border-radius: 12px;
+        color: #e9ecf1 !important;
+    }
+
+    div[role="radiogroup"] label:has(input:checked) {
+        background: linear-gradient(135deg, #d51d36, #b61328);
+        box-shadow: 0 8px 18px rgba(178, 21, 42, .28);
+    }
+
+    div[role="radiogroup"] label > div:first-child {
+        display: none;
+    }
+
+    .stats {
+        display: flex;
+        justify-content: center;
+        gap: 30px;
+        margin: 18px 0 0;
+        color: #c1c6cf;
+        font-size: 17px;
+    }
+
+    .stats strong {
+        color: #ffffff;
+    }
+
+    .stButton > button {
+        min-height: 58px;
+        border: 0;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #e21d35, #be1028);
+        color: white;
+        font-size: 19px;
+        font-weight: 800;
+        box-shadow: 0 12px 24px rgba(190, 16, 40, .22);
+    }
+
+    .stButton > button:hover {
+        border: 0;
+        background: linear-gradient(135deg, #ee2941, #ca1730);
+        color: white;
+    }
+
+    .stButton > button:focus {
+        box-shadow: 0 0 0 3px rgba(238, 41, 65, .25);
+        color: white;
+    }
+
+    [data-testid="stProgress"] > div > div {
+        background: #d51d36;
+    }
+
+    details {
+        color: #d9dde4;
+    }
+
+    @media (max-width: 560px) {
+        .block-container {
+            padding-left: 14px;
+            padding-right: 14px;
+        }
+
+        div[role="radiogroup"] label {
+            min-width: 120px;
+        }
+
+        .stats {
+            gap: 15px;
+            font-size: 14px;
+        }
+    }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
 st.title("21 Questions")
-st.caption("選擇題型，按下按鈕翻開一張題目卡。")
+st.markdown(
+    '<p class="app-subtitle">選擇題型，翻開一張屬於你們的問題卡。</p>',
+    unsafe_allow_html=True,
+)
 
 st.radio(
     "選擇題型",
@@ -205,17 +527,32 @@ st.radio(
     horizontal=True,
     key="category_selector",
     on_change=change_category,
+    label_visibility="collapsed",
 )
 
 if not st.session_state.remaining_questions:
     reset_deck(st.session_state.category)
 
+total = len(QUESTION_BANK[st.session_state.category])
+remaining = len(st.session_state.remaining_questions)
+drawn = st.session_state.question_number
+
+st.markdown(
+    f"""
+    <div class="stats">
+        <span>▱ 題目進度：<strong>{drawn} / {total}</strong></span>
+        <span>↻ 未抽題：<strong>{remaining}</strong></span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
 render_card()
 
 button_label = (
-    "翻開第一張牌"
+    "▱ 翻開第一張牌"
     if st.session_state.current_question is None
-    else "下一張牌"
+    else "▱ 翻開下一張牌"
 )
 
 if st.button(
@@ -223,28 +560,18 @@ if st.button(
     use_container_width=True,
     type="primary",
 ):
-    draw_question(st.session_state.category)
+    draw_question()
     st.rerun()
 
-left, right = st.columns(2)
+if st.session_state.current_question:
+    st.progress((total - remaining) / total)
 
-with left:
-    total = len(QUESTION_BANK[st.session_state.category])
-    remaining = len(st.session_state.remaining_questions)
-    st.caption(f"共 {total} 題｜剩餘 {remaining} 題")
+with st.expander("重新洗牌與題庫資訊"):
+    st.write(f"朋友題：{len(QUESTION_BANK['朋友'])} 題")
+    st.write(f"感情題：{len(QUESTION_BANK['感情'])} 題")
 
-with right:
     if st.button("重新洗牌", use_container_width=True):
         st.session_state.current_question = None
         st.session_state.question_number = 0
         reset_deck(st.session_state.category)
         st.rerun()
-
-if st.session_state.current_question:
-    total = len(QUESTION_BANK[st.session_state.category])
-    remaining = len(st.session_state.remaining_questions)
-    st.progress((total - remaining) / total)
-
-with st.expander("題庫統計"):
-    st.write(f"朋友題：{len(QUESTION_BANK['朋友'])} 題")
-    st.write(f"感情題：{len(QUESTION_BANK['感情'])} 題")
