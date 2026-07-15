@@ -118,15 +118,17 @@ def render_card() -> None:
 
     .card {{
         position: relative;
-        width: min(92vw, 520px);
-        aspect-ratio: 0.72;
+        width: min(84vw, 360px);
+        aspect-ratio: 0.70;
         transform-style: preserve-3d;
-        transition: transform 900ms cubic-bezier(.2,.72,.22,1);
-        filter: drop-shadow(0 28px 35px rgba(0, 0, 0, .35));
+        transform: rotateY(0deg);
+        transition: transform 820ms cubic-bezier(.2,.72,.22,1);
+        filter: drop-shadow(0 18px 24px rgba(0, 0, 0, .30));
     }}
 
     .card.flipped {{
-        animation: reveal 950ms cubic-bezier(.2,.72,.22,1) forwards;
+        transform: rotateY(180deg);
+        animation: reveal 820ms cubic-bezier(.2,.72,.22,1);
     }}
 
     @keyframes reveal {{
@@ -145,10 +147,10 @@ def render_card() -> None:
         position: absolute;
         inset: 0;
         overflow: hidden;
-        border-radius: 30px;
+        border-radius: 24px;
         backface-visibility: hidden;
         -webkit-backface-visibility: hidden;
-        border: 10px solid #d9ad71;
+        border: 7px solid #d9ad71;
         box-shadow:
             inset 0 0 0 2px rgba(73, 31, 28, .5),
             inset 0 0 34px rgba(46, 17, 16, .25);
@@ -245,13 +247,13 @@ def render_card() -> None:
         color: #221d1a;
         background:
             radial-gradient(circle at 25% 12%,
-                rgba(255,255,255,.92), transparent 36%),
+                rgba(255,255,255,.94), transparent 38%),
             repeating-linear-gradient(
                 15deg,
                 rgba(120, 74, 41, .018) 0 1px,
                 transparent 1px 5px
             ),
-            #f9f0df;
+            linear-gradient(145deg, #fffaf0, #f5ead8);
     }}
 
     .front::before {{
@@ -280,7 +282,7 @@ def render_card() -> None:
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 64px 48px 72px;
+        padding: 44px 30px 52px;
         text-align: center;
     }}
 
@@ -312,7 +314,7 @@ def render_card() -> None:
         width: 100%;
         display: grid;
         place-items: center;
-        font-size: clamp(24px, 5.1vw, 38px);
+        font-size: clamp(21px, 3.2vw, 29px);
         font-weight: 700;
         line-height: 1.55;
         letter-spacing: .02em;
@@ -326,23 +328,32 @@ def render_card() -> None:
     }}
 
     @media (max-width: 520px) {{
+        .card {{
+            width: min(78vw, 300px);
+        }}
+
         .face {{
-            border-width: 7px;
-            border-radius: 23px;
+            border-width: 6px;
+            border-radius: 20px;
         }}
 
         .front-content {{
-            padding: 48px 30px 58px;
+            padding: 38px 24px 44px;
         }}
 
         .question {{
-            font-size: clamp(21px, 6.3vw, 31px);
+            font-size: clamp(19px, 5.8vw, 25px);
+            line-height: 1.5;
+        }}
+
+        .category {{
+            font-size: 18px;
         }}
 
         .corner {{
-            width: 42px;
-            height: 42px;
-            font-size: 32px;
+            width: 36px;
+            height: 36px;
+            font-size: 28px;
         }}
     }}
 
@@ -389,7 +400,7 @@ def render_card() -> None:
     # 使用 components.html，避免 Streamlit 將 HTML 誤判成程式碼區塊。
     components.html(
         card_html,
-        height=760,
+        height=545,
         scrolling=False,
     )
 
