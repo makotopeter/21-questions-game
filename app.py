@@ -12,6 +12,7 @@ QUESTION_BANK = {
     "感情": ['你相信一見鍾情嗎？', '你的初吻是什麼樣的體驗？', '你印象最深刻、最美好的一次接吻是什麼樣子？', '你對我的第一印象是什麼？', '如果有人約你第一次約會，你希望對方帶你去哪裡？如果換作是你，你又會帶對方去哪裡？', '你希望另一半具備哪三個特質？', '無論是優點還是生活習慣，另一半有哪些條件是你絕對不能妥協的？', '你曾經真正愛過一個人嗎？', '你曾經暗戀過哪位虛構角色？', '和喜歡的人傳訊息時，你最常使用哪些Emoji？', '為了吸引某個人的注意，你做過最瘋狂的一件事是什麼？', '在感情中，你最大的恐懼是什麼？', '在喜歡的人面前，你做過最糗的一件事是什麼？', '你覺得第一次約會是令人期待，還是讓人緊張？為什麼？', '你最喜歡哪一對電影情侶？為什麼？', '如果可以親身體驗一部浪漫喜劇，你會選哪一部？為什麼？', '你最喜歡帶另一半去哪裡約會？', '你最欣賞哪一對情侶或伴侶？為什麼？', '你認為一段感情發展到什麼階段，才適合在社群媒體公開？', '最容易讓你心動的特質是什麼？', '最容易讓你瞬間失去好感的是什麼？', '你最喜歡我的哪一點？', '你最近傳出的一則曖昧訊息是什麼內容？', '你覺得單身最大的缺點是什麼？', '你覺得單身最大的優點是什麼？', '你覺得自己是個浪漫至上的人嗎？為什麼？', '現階段的你，比較想談輕鬆自在的戀愛，還是認真穩定的感情？', '你認為長期交往最困難的地方是什麼？', '你認為長期交往最棒的地方是什麼？', '如果你明天就要結婚，而且婚禮一定要有主題，你會選擇什麼風格？', '回想過去的感情，你最大的遺憾是什麼？', '失戀後，你最喜歡用什麼方式療傷？', '如果要用一張迷因形容你現在的人生，會是哪一張？', '你寧願曾經深愛過卻失去，還是從來沒有愛過？', '和另一半發生爭執後，你通常會主動和好，還是等對方先開口？', '你曾經對幾個人說過「我愛你」？', '為了取消一次約會，你用過最荒唐的藉口是什麼？', '別人為你做過最浪漫的一件事是什麼？', '你為別人做過最浪漫的一件事是什麼？', '你心目中的完美約會，或夢幻約會是什麼樣子？', '如果現在可以帶我去世界任何一個地方，你會選哪裡？', '如果我們一起受困在無人島，你會帶哪一樣東西？', '你認為一個人最有魅力的特質是什麼？', '你通常會怎麼向喜歡的人示好或曖昧？', '你的「愛的表現」（Love Language）是什麼？', '你第一位迷戀過的明星是誰？', '你人生中最迷戀的一位明星是誰？', '你曾經在最大膽的什麼地方親吻過別人？', '你曾經夢到過我嗎？', '你的敏感帶有哪些？', '如果我們現在一起跳一支慢舞，你會選哪一首歌？', '有哪一件事是你很想和我一起完成的？', '有沒有什麼特質，明知道不該被吸引，卻還是忍不住覺得很有魅力？', '你心目中的第二次約會，最理想會是什麼樣子？', '你覺得認識多久之後接吻，才不算太快？'],
 }
 
+
 if "category" not in st.session_state:
     st.session_state.category = "朋友"
 
@@ -26,13 +27,11 @@ if "question_number" not in st.session_state:
 
 
 def reset_deck(category: str) -> None:
-    """重新建立洗牌後的題目牌堆。"""
     st.session_state.remaining_questions = QUESTION_BANK[category].copy()
     random.shuffle(st.session_state.remaining_questions)
 
 
 def draw_question(category: str) -> None:
-    """抽出一題；整個題庫抽完前不重複。"""
     if not st.session_state.remaining_questions:
         reset_deck(category)
 
@@ -49,10 +48,158 @@ def change_category() -> None:
     reset_deck(st.session_state.category)
 
 
-st.title("21 Questions")
-st.caption("選擇題型後，隨機抽出一題。整個題庫抽完前不會重複。")
+def render_card() -> None:
+    import html
 
-selected_category = st.radio(
+    category = html.escape(st.session_state.category)
+    question = st.session_state.current_question
+
+    if question is None:
+        card_class = "question-card"
+        front_text = "點擊下方按鈕翻牌"
+        back_content = "準備開始"
+    else:
+        card_class = "question-card is-flipped"
+        front_text = "21 Questions"
+        back_content = html.escape(question)
+
+    st.markdown(
+        f"""
+        <style>
+        .card-stage {{
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            padding: 18px 0 28px;
+            perspective: 1200px;
+        }}
+
+        .question-card {{
+            width: min(100%, 520px);
+            height: 330px;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.85s cubic-bezier(.2,.7,.2,1);
+        }}
+
+        .question-card.is-flipped {{
+            animation: flip-card 0.9s cubic-bezier(.2,.7,.2,1) forwards;
+        }}
+
+        @keyframes flip-card {{
+            0% {{
+                transform: rotateY(0deg) scale(0.97);
+            }}
+            55% {{
+                transform: rotateY(105deg) scale(1.02);
+            }}
+            100% {{
+                transform: rotateY(180deg) scale(1);
+            }}
+        }}
+
+        .card-face {{
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 34px;
+            border-radius: 28px;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            box-shadow: 0 18px 45px rgba(16, 24, 40, 0.18);
+            text-align: center;
+        }}
+
+        .card-front {{
+            color: white;
+            background:
+                radial-gradient(circle at top left,
+                    rgba(255,255,255,.22), transparent 34%),
+                linear-gradient(145deg, #343a40, #111827);
+            border: 1px solid rgba(255,255,255,.18);
+        }}
+
+        .card-front::before {{
+            content: "";
+            position: absolute;
+            inset: 16px;
+            border: 1px solid rgba(255,255,255,.35);
+            border-radius: 20px;
+            pointer-events: none;
+        }}
+
+        .card-back {{
+            transform: rotateY(180deg);
+            background:
+                radial-gradient(circle at top right,
+                    rgba(255,255,255,.75), transparent 32%),
+                linear-gradient(145deg, #fff7ed, #fef3c7);
+            color: #292524;
+            border: 1px solid rgba(120, 53, 15, 0.16);
+        }}
+
+        .card-kicker {{
+            margin-bottom: 18px;
+            font-size: 0.82rem;
+            font-weight: 800;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            opacity: 0.78;
+        }}
+
+        .card-title {{
+            max-width: 430px;
+            font-size: clamp(1.45rem, 4vw, 2.1rem);
+            font-weight: 800;
+            line-height: 1.45;
+        }}
+
+        .card-number {{
+            margin-top: 22px;
+            font-size: 0.85rem;
+            opacity: 0.62;
+        }}
+
+        @media (max-width: 640px) {{
+            .question-card {{
+                height: 390px;
+            }}
+
+            .card-face {{
+                padding: 28px 24px;
+                border-radius: 22px;
+            }}
+        }}
+        </style>
+
+        <div class="card-stage">
+            <div class="{card_class}">
+                <div class="card-face card-front">
+                    <div class="card-kicker">{category}</div>
+                    <div class="card-title">{front_text}</div>
+                </div>
+
+                <div class="card-face card-back">
+                    <div class="card-kicker">{category}</div>
+                    <div class="card-title">{back_content}</div>
+                    <div class="card-number">
+                        第 {st.session_state.question_number} 題
+                    </div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+st.title("21 Questions")
+st.caption("選擇題型，按下按鈕翻開一張題目卡。")
+
+st.radio(
     "選擇題型",
     options=["朋友", "感情"],
     horizontal=True,
@@ -63,16 +210,28 @@ selected_category = st.radio(
 if not st.session_state.remaining_questions:
     reset_deck(st.session_state.category)
 
+render_card()
+
+button_label = (
+    "翻開第一張牌"
+    if st.session_state.current_question is None
+    else "下一張牌"
+)
+
+if st.button(
+    button_label,
+    use_container_width=True,
+    type="primary",
+):
+    draw_question(st.session_state.category)
+    st.rerun()
+
 left, right = st.columns(2)
 
 with left:
-    if st.button(
-        "開始抽題" if st.session_state.current_question is None else "下一題",
-        use_container_width=True,
-        type="primary",
-    ):
-        draw_question(st.session_state.category)
-        st.rerun()
+    total = len(QUESTION_BANK[st.session_state.category])
+    remaining = len(st.session_state.remaining_questions)
+    st.caption(f"共 {total} 題｜剩餘 {remaining} 題")
 
 with right:
     if st.button("重新洗牌", use_container_width=True):
@@ -82,24 +241,9 @@ with right:
         st.rerun()
 
 if st.session_state.current_question:
-    st.divider()
-
-    with st.chat_message("assistant"):
-        st.markdown(
-            f"**{st.session_state.category}題 · 第 "
-            f"{st.session_state.question_number} 題**"
-        )
-        st.markdown(f"### {st.session_state.current_question}")
-
     total = len(QUESTION_BANK[st.session_state.category])
     remaining = len(st.session_state.remaining_questions)
-
     st.progress((total - remaining) / total)
-    st.caption(
-        f"本類題庫共 {total} 題，尚有 {remaining} 題未出現。"
-    )
-else:
-    st.info("按下「開始抽題」產生第一題。")
 
 with st.expander("題庫統計"):
     st.write(f"朋友題：{len(QUESTION_BANK['朋友'])} 題")
