@@ -37,6 +37,7 @@ def initialize_state() -> None:
         "current_question": None,
         "remaining_questions": [],
         "question_number": 0,
+        "last_card_token": "",
     }
 
     for key, value in defaults.items():
@@ -81,10 +82,14 @@ def render_card() -> None:
     question = st.session_state.current_question
 
     is_flipped = question is not None
-    safe_question = html.escape(question or "準備開始")
+    safe_question = html.escape(question or "點一下牌面開始")
     safe_label = html.escape(config["label"])
     safe_icon = html.escape(config["icon"])
-    animation_class = "flipped" if is_flipped else ""
+    state_class = "show-front" if is_flipped else "show-back"
+
+    # 每一題使用不同 token，點牌面後整頁重新載入並觸發下一題。
+    next_token = str(st.session_state.question_number + 1)
+    card_url = f"?card_action=next&card_token={next_token}"
 
     card_html = f"""
 <!DOCTYPE html>
@@ -93,286 +98,338 @@ def render_card() -> None:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-    * {{
-        box-sizing: border-box;
-    }}
+* {{
+    box-sizing: border-box;
+}}
 
-    html, body {{
-        margin: 0;
-        background: transparent;
-        font-family:
-            -apple-system,
-            BlinkMacSystemFont,
-            "Segoe UI",
-            "Microsoft JhengHei",
-            sans-serif;
-    }}
+html, body {{
+    margin: 0;
+    overflow: hidden;
+    background: transparent;
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        "Microsoft JhengHei",
+        sans-serif;
+}}
 
-    .scene {{
-        width: 100%;
-        display: flex;
-        justify-content: center;
-        padding: 12px 8px 28px;
-        perspective: 1500px;
-    }}
+.scene {{
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 8px 6px 18px;
+    perspective: 1300px;
+}}
 
-    .card {{
-        position: relative;
-        width: min(84vw, 360px);
-        aspect-ratio: 0.70;
-        transform-style: preserve-3d;
-        transform: rotateY(0deg);
-        transition: transform 820ms cubic-bezier(.2,.72,.22,1);
-        filter: drop-shadow(0 18px 24px rgba(0, 0, 0, .30));
-    }}
+.card-link {{
+    display: block;
+    width: min(76vw, 330px);
+    aspect-ratio: 0.70;
+    position: relative;
+    text-decoration: none;
+    cursor: pointer;
+    filter: drop-shadow(0 16px 22px rgba(0, 0, 0, .30));
+    -webkit-tap-highlight-color: transparent;
+}}
 
-    .card.flipped {{
-        transform: rotateY(180deg);
-        animation: reveal 820ms cubic-bezier(.2,.72,.22,1);
-    }}
+.face {{
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border: 6px solid #d9ad71;
+    border-radius: 22px;
+    transform-style: preserve-3d;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    box-shadow:
+        inset 0 0 0 2px rgba(73, 31, 28, .45),
+        inset 0 0 26px rgba(46, 17, 16, .18);
+}}
 
-    @keyframes reveal {{
-        0% {{
-            transform: rotateY(0deg) translateY(8px) scale(.97);
-        }}
-        46% {{
-            transform: rotateY(92deg) translateY(-4px) scale(1.025);
-        }}
-        100% {{
-            transform: rotateY(180deg) translateY(0) scale(1);
-        }}
+/* 初始狀態：顯示牌背。 */
+.back {{
+    z-index: 2;
+    transform: rotateY(0deg);
+    opacity: 1;
+}}
+
+.front {{
+    z-index: 1;
+    transform: rotateY(-180deg);
+    opacity: 0;
+}}
+
+/*
+翻牌後不再旋轉整個容器。
+牌背單獨轉走、正面單獨轉入，避免 Safari/Chrome
+出現鏡像牌背或正反面堆疊錯誤。
+*/
+.show-front .back {{
+    animation: back-out 720ms cubic-bezier(.2,.72,.22,1) forwards;
+    pointer-events: none;
+}}
+
+.show-front .front {{
+    z-index: 3;
+    animation: front-in 720ms cubic-bezier(.2,.72,.22,1) forwards;
+}}
+
+@keyframes back-out {{
+    0% {{
+        transform: rotateY(0deg) scale(1);
+        opacity: 1;
+        visibility: visible;
+    }}
+    49% {{
+        opacity: 1;
+    }}
+    50% {{
+        opacity: 0;
+    }}
+    100% {{
+        transform: rotateY(180deg) scale(.98);
+        opacity: 0;
+        visibility: hidden;
+    }}
+}}
+
+@keyframes front-in {{
+    0% {{
+        transform: rotateY(-180deg) scale(.98);
+        opacity: 0;
+    }}
+    49% {{
+        opacity: 0;
+    }}
+    50% {{
+        opacity: 1;
+    }}
+    100% {{
+        transform: rotateY(0deg) scale(1);
+        opacity: 1;
+        visibility: visible;
+    }}
+}}
+
+.back {{
+    display: grid;
+    place-items: center;
+    color: #f4cf8e;
+    background:
+        radial-gradient(circle at 50% 50%,
+            rgba(108, 20, 25, .22) 0 16%,
+            transparent 16.5%),
+        repeating-radial-gradient(
+            circle at 52% 48%,
+            rgba(255,255,255,.025) 0 1px,
+            transparent 1px 4px
+        ),
+        linear-gradient(145deg, #9f2027, #71131b 58%, #8f2026);
+}}
+
+.back::before {{
+    content: "";
+    position: absolute;
+    inset: 15px;
+    border: 2px solid rgba(241, 198, 119, .85);
+    border-radius: 15px;
+    box-shadow:
+        inset 0 0 0 6px rgba(128, 31, 35, .78),
+        inset 0 0 0 8px rgba(240, 196, 116, .42);
+}}
+
+.corner {{
+    position: absolute;
+    width: 42px;
+    height: 42px;
+    color: #edc47c;
+    font-size: 32px;
+    line-height: 1;
+}}
+
+.corner.tl {{ top: 20px; left: 22px; }}
+.corner.tr {{ top: 20px; right: 22px; transform: rotate(90deg); }}
+.corner.bl {{ bottom: 20px; left: 22px; transform: rotate(-90deg); }}
+.corner.br {{ bottom: 20px; right: 22px; transform: rotate(180deg); }}
+
+.sigil {{
+    position: relative;
+    width: 62%;
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+    border: 2px solid rgba(239, 193, 113, .78);
+    border-radius: 50%;
+    box-shadow:
+        0 0 0 15px rgba(235, 185, 99, .08),
+        0 0 0 2px rgba(93, 19, 24, .9) inset;
+}}
+
+.sigil::before,
+.sigil::after {{
+    content: "";
+    position: absolute;
+    inset: 14%;
+    border: 1px solid rgba(239, 193, 113, .68);
+    transform: rotate(45deg);
+}}
+
+.sigil::after {{
+    inset: 27%;
+    border-radius: 50%;
+    transform: none;
+}}
+
+.question-mark {{
+    position: relative;
+    z-index: 2;
+    font-family: Georgia, serif;
+    font-size: clamp(78px, 18vw, 118px);
+    font-weight: 700;
+    text-shadow: 0 6px 12px rgba(38, 6, 9, .55);
+}}
+
+.front {{
+    color: #221d1a;
+    background:
+        radial-gradient(circle at 25% 12%,
+            rgba(255,255,255,.96), transparent 38%),
+        repeating-linear-gradient(
+            15deg,
+            rgba(120, 74, 41, .018) 0 1px,
+            transparent 1px 5px
+        ),
+        linear-gradient(145deg, #fffaf0, #f5ead8);
+}}
+
+.front::before {{
+    content: "";
+    position: absolute;
+    inset: 16px;
+    border: 2px solid {config["accent"]};
+    border-radius: 14px;
+    opacity: .72;
+}}
+
+.front::after {{
+    content: "✦";
+    position: absolute;
+    left: 50%;
+    bottom: 27px;
+    transform: translateX(-50%);
+    color: {config["accent"]};
+    font-size: 21px;
+}}
+
+.front-content {{
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 38px 27px 43px;
+    text-align: center;
+}}
+
+.category {{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: {config["accent"]};
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: .03em;
+}}
+
+.divider {{
+    width: 58%;
+    height: 1px;
+    margin-top: 17px;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        {config["accent"]},
+        transparent
+    );
+    opacity: .65;
+}}
+
+.question {{
+    flex: 1;
+    width: 100%;
+    display: grid;
+    place-items: center;
+    color: #211d1a;
+    font-size: clamp(20px, 3vw, 27px);
+    font-weight: 700;
+    line-height: 1.55;
+    letter-spacing: .015em;
+    overflow-wrap: anywhere;
+}}
+
+.number {{
+    color: rgba(68, 45, 35, .62);
+    font-size: 13px;
+    letter-spacing: .08em;
+}}
+
+.click-hint {{
+    position: absolute;
+    left: 50%;
+    bottom: -31px;
+    transform: translateX(-50%);
+    width: 100%;
+    color: #aeb5c0;
+    font-size: 13px;
+    text-align: center;
+}}
+
+@media (max-width: 520px) {{
+    .card-link {{
+        width: min(70vw, 280px);
     }}
 
     .face {{
-        position: absolute;
-        inset: 0;
-        overflow: hidden;
-        border-radius: 24px;
-        backface-visibility: hidden;
-        -webkit-backface-visibility: hidden;
-        border: 7px solid #d9ad71;
-        box-shadow:
-            inset 0 0 0 2px rgba(73, 31, 28, .5),
-            inset 0 0 34px rgba(46, 17, 16, .25);
-    }}
-
-    .back {{
-        display: grid;
-        place-items: center;
-        color: #f4cf8e;
-        background:
-            radial-gradient(circle at 50% 50%,
-                rgba(108, 20, 25, .22) 0 16%,
-                transparent 16.5%),
-            repeating-radial-gradient(
-                circle at 52% 48%,
-                rgba(255,255,255,.025) 0 1px,
-                transparent 1px 4px
-            ),
-            linear-gradient(145deg, #9f2027, #71131b 58%, #8f2026);
-    }}
-
-    .back::before {{
-        content: "";
-        position: absolute;
-        inset: 18px;
-        border: 2px solid rgba(241, 198, 119, .85);
-        border-radius: 18px;
-        box-shadow:
-            inset 0 0 0 7px rgba(128, 31, 35, .78),
-            inset 0 0 0 9px rgba(240, 196, 116, .42);
-    }}
-
-    .corner {{
-        position: absolute;
-        width: 54px;
-        height: 54px;
-        color: #edc47c;
-        font-size: 42px;
-        line-height: 1;
-    }}
-
-    .corner.tl {{ top: 24px; left: 27px; }}
-    .corner.tr {{ top: 24px; right: 27px; transform: rotate(90deg); }}
-    .corner.bl {{ bottom: 24px; left: 27px; transform: rotate(-90deg); }}
-    .corner.br {{ bottom: 24px; right: 27px; transform: rotate(180deg); }}
-
-    .sigil {{
-        position: relative;
-        width: 64%;
-        aspect-ratio: 1;
-        display: grid;
-        place-items: center;
-        border: 2px solid rgba(239, 193, 113, .78);
-        border-radius: 50%;
-        box-shadow:
-            0 0 0 18px rgba(235, 185, 99, .08),
-            0 0 0 2px rgba(93, 19, 24, .9) inset;
-    }}
-
-    .sigil::before,
-    .sigil::after {{
-        content: "";
-        position: absolute;
-        inset: 14%;
-        border: 1px solid rgba(239, 193, 113, .68);
-        transform: rotate(45deg);
-    }}
-
-    .sigil::after {{
-        inset: 27%;
-        border-radius: 50%;
-        transform: none;
-    }}
-
-    .question-mark {{
-        position: relative;
-        z-index: 2;
-        font-family: Georgia, serif;
-        font-size: clamp(90px, 20vw, 142px);
-        font-weight: 700;
-        text-shadow: 0 6px 12px rgba(38, 6, 9, .55);
-    }}
-
-    .stars {{
-        position: absolute;
-        inset: 16%;
-        border-top: 2px solid rgba(239, 193, 113, .38);
-        border-bottom: 2px solid rgba(239, 193, 113, .38);
-        transform: rotate(45deg);
-    }}
-
-    .front {{
-        transform: rotateY(180deg);
-        color: #221d1a;
-        background:
-            radial-gradient(circle at 25% 12%,
-                rgba(255,255,255,.94), transparent 38%),
-            repeating-linear-gradient(
-                15deg,
-                rgba(120, 74, 41, .018) 0 1px,
-                transparent 1px 5px
-            ),
-            linear-gradient(145deg, #fffaf0, #f5ead8);
-    }}
-
-    .front::before {{
-        content: "";
-        position: absolute;
-        inset: 19px;
-        border: 2px solid {config["accent"]};
-        border-radius: 17px;
-        opacity: .75;
-    }}
-
-    .front::after {{
-        content: "✦";
-        position: absolute;
-        left: 50%;
-        bottom: 36px;
-        transform: translateX(-50%);
-        color: {config["accent"]};
-        font-size: 25px;
+        border-width: 5px;
+        border-radius: 19px;
     }}
 
     .front-content {{
-        position: absolute;
-        inset: 0;
-        z-index: 2;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 44px 30px 52px;
-        text-align: center;
-    }}
-
-    .category {{
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        color: {config["accent"]};
-        font-size: clamp(18px, 4vw, 24px);
-        font-weight: 800;
-        letter-spacing: .03em;
-    }}
-
-    .divider {{
-        width: 62%;
-        height: 1px;
-        margin-top: 22px;
-        background: linear-gradient(
-            90deg,
-            transparent,
-            {config["accent"]},
-            transparent
-        );
-        opacity: .62;
+        padding: 32px 22px 38px;
     }}
 
     .question {{
-        flex: 1;
-        width: 100%;
-        display: grid;
-        place-items: center;
-        font-size: clamp(21px, 3.2vw, 29px);
-        font-weight: 700;
-        line-height: 1.55;
-        letter-spacing: .02em;
-        overflow-wrap: anywhere;
+        font-size: clamp(18px, 5.4vw, 23px);
     }}
 
-    .number {{
-        color: rgba(68, 45, 35, .62);
-        font-size: 15px;
-        letter-spacing: .1em;
+    .category {{
+        font-size: 17px;
     }}
+}}
 
-    @media (max-width: 520px) {{
-        .card {{
-            width: min(78vw, 300px);
-        }}
-
-        .face {{
-            border-width: 6px;
-            border-radius: 20px;
-        }}
-
-        .front-content {{
-            padding: 38px 24px 44px;
-        }}
-
-        .question {{
-            font-size: clamp(19px, 5.8vw, 25px);
-            line-height: 1.5;
-        }}
-
-        .category {{
-            font-size: 18px;
-        }}
-
-        .corner {{
-            width: 36px;
-            height: 36px;
-            font-size: 28px;
-        }}
+@media (prefers-reduced-motion: reduce) {{
+    .show-front .back,
+    .show-front .front {{
+        animation-duration: 1ms;
     }}
-
-    @media (prefers-reduced-motion: reduce) {{
-        .card.flipped {{
-            animation-duration: 1ms;
-        }}
-    }}
+}}
 </style>
 </head>
 <body>
 <div class="scene">
-    <div class="card {animation_class}">
+    <a
+        class="card-link {state_class}"
+        href="{card_url}"
+        target="_top"
+        aria-label="翻開下一張牌"
+    >
         <div class="face back">
             <div class="corner tl">⌜</div>
             <div class="corner tr">⌜</div>
             <div class="corner bl">⌜</div>
             <div class="corner br">⌜</div>
-            <div class="stars"></div>
             <div class="sigil">
                 <div class="question-mark">?</div>
             </div>
@@ -391,21 +448,37 @@ def render_card() -> None:
                 </div>
             </div>
         </div>
-    </div>
+
+        <div class="click-hint">
+            點選牌面可翻開下一張牌
+        </div>
+    </a>
 </div>
 </body>
 </html>
 """
 
-    # 使用 components.html，避免 Streamlit 將 HTML 誤判成程式碼區塊。
     components.html(
         card_html,
-        height=545,
+        height=525,
         scrolling=False,
     )
 
-
 initialize_state()
+
+# 處理 iframe 牌面點擊。使用遞增 token 避免重新整理時重複抽題。
+card_action = st.query_params.get("card_action", "")
+card_token = st.query_params.get("card_token", "")
+
+if (
+    card_action == "next"
+    and card_token
+    and card_token != st.session_state.last_card_token
+):
+    st.session_state.last_card_token = card_token
+    draw_question()
+    st.query_params.clear()
+    st.rerun()
 
 st.markdown(
     """
