@@ -615,4 +615,4 @@ html = html.replace("__BANK_JSON__", bank_json)
 components.html(
     html,
     height=700,
-    scrolling=False,
+    scrolling=False,)
